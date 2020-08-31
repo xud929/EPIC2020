@@ -1,0 +1,114 @@
+&Global
+    seed=123456789,
+    total_turns=50000,
+    half_crossing_angle=<thetac=12.5e-3>,
+    output_luminosity="%s.lumi",
+    gaussian_when_luminosity=2,
+    output_turns=100
+&end
+
+&Beam1
+    output_moments="%s.ele",
+    n_macro=512000,
+    n_particle=3.44e11,
+    energy=10e9,
+    mass=<emass>,
+    charge=-1.0,
+    transverse_size=<sigx=120e-6>,<sigy=22.4e-6>,
+    longitudinal_size=<sigze=2e-2>,<sigde=5.8e-4>,
+    beta=<bipe=0.72>,<bipye=0.102>,
+    alpha=0.0,0.0,
+    zslice=7,
+    slice_center="midpoint",
+    //slice_method="equal-area"
+    slice_method="erfinv"
+&end
+
+&Beam2
+    output_moments="%s.pro",
+    n_macro=2048000,
+    n_particle=1.0357e11,
+    energy=275e9,
+    mass=<pmass>,
+    charge=1.0,
+    transverse_size=<sigx>,<sigy>,
+    longitudinal_size=<sigz=7e-2>,<sigd=6.6e-4>,
+    beta=<bip=0.9>,<bipy=0.059>,
+    alpha=0.0,0.0,
+    zslice=25,
+    slice_center="midpoint",
+    //slice_method="equal-area"
+    slice_method="erfinv"
+&end
+
+&CC2IP1
+    betax=<bcce=800.0>,<bipe>,
+    alphax=0.0,0.0,
+    dphasex=<pi/2.0>
+&end
+
+&IP2CC1
+    betax=<bipe>,<bcce>,
+    alphax=0.0,0.0,
+    dphasex=<pi/2.0>
+&end
+
+&CC2IP2
+    betax=<bcc=1300.0>,<bip>,
+    alphax=0.0,0.0,
+    dphasex=<pi/2.0>
+&end
+
+&IP2CC2
+    betax=<bip>,<bcc>,
+    alphax=0.0,0.0,
+    dphasex=<pi/2.0>
+&end
+
+&ThinCrabCavity_before_IP1
+    frequency=400e6,
+    strength=<tan(thetac)/sqrt(bcce*bipe)>,
+    phase=0.0,
+    harmonic=2,
+    relative_strength=0.0
+&end
+
+&ThinCrabCavity_after_IP1
+    frequency=400e6,
+    strength=<tan(thetac)/sqrt(bcce*bipe)>,
+    phase=0.0,
+    harmonic=2,
+    relative_strength=0.0
+&end
+
+&ThinCrabCavity_before_IP2
+    frequency=200e6,
+    strength=<tan(thetac)/sqrt(bcc*bip)>,
+    phase=0.0,
+    harmonic=2,
+    relative_strength=0.0
+&end
+
+&ThinCrabCavity_after_IP2
+    frequency=200e6,
+    strength=<tan(thetac)/sqrt(bcc*bip)>,
+    phase=0.0,
+    harmonic=2,
+    relative_strength=0.0
+&end
+
+&OneTurn1
+    beta=<bipe>,<bipye>,<sigze/sigde>,
+    alpha=0.0,0.0,
+    tune=0.08,0.06,0.069,
+    chromaticity=1.0,1.0,
+    damping_turns=4000.0,4000.0,2000.0,
+    equilibrium_sizes=<sigx>,<sigy>,<sigze>
+&end
+
+&OneTurn2
+    beta=<bip>,<bipy>,<sigz/sigd>,
+    alpha=0.0,0.0,
+    tune=0.31,0.305,0.01,
+    chromaticity=2.0,2.0
+&end
