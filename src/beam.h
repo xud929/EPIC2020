@@ -1,0 +1,211 @@
+#ifndef BEAM_H
+#define BEAM_H
+#include<vector>
+#include<mpi.h>
+#include<random>
+#include<trng/mt19937.hpp>
+#include<trng/truncated_normal_dist.hpp>
+#include<array>
+#include<iostream>
+#include<tuple>
+#include"acc_base.h"
+#include"poisson_solver.h"
+
+class ThinStrongBeam;
+class GaussianStrongBeam;
+const double round_beam_threshold=1e-6;
+
+class Beam{
+public:
+  using slice_type=std::tuple<double,std::vector<double>,std::vector<double>,std::vector<double>,std::vector<std::vector<unsigned>>>;
+  Beam()=default;
+  Beam(unsigned, const std::array<double,3>&, const std::array<double,2>&, const std::array<double,3>&, trng::mt19937&, MPI_Comm comm=MPI_COMM_NULL);
+  Beam(unsigned, const std::array<double,3>&, const std::array<double,2>&, const std::array<double,3>&, unsigned, MPI_Comm comm=MPI_COMM_NULL);
+  Beam& generate(trng::mt19937&);
+  Beam& normalize(const std::array<double,3>&, const std::array<double,2>&, const std::array<double,3>&);
+  //Beam(unsigned, const std::vector<double>&, const std::vector<double>&, const std::vector<double>&, unsigned, int);
+  static void set_cutoff(double);
+  double get_mean(unsigned) const;
+  double get_variance(unsigned,unsigned) const;
+  double get_emittance(unsigned) const;
+  std::vector<double> get_statistics() const;
+  const std::vector<double> &get_coordinate(unsigned d) const{return *(ptr_coord[d]);}
+  const double &get_coordinate(unsigned d, unsigned ind) const{return (*(ptr_coord[d]))[ind];}
+  void set_coordinate(unsigned d, unsigned ind, double xx){(*(ptr_coord[d]))[ind]=xx;}
+  double Pass(const AccBase&);
+  double RPass(const AccBase&);
+  template<typename...Args>
+  double Pass(const AccBase&, Args&&...);
+  template<typename...Args>
+  double RPass(const AccBase&, Args&&...);
+  void reverse(){
+      for(unsigned i=0;i<x.size();++i){
+          px[i]*=-1.0;py[i]*=-1.0;z[i]*=-1.0;
+      }
+  }
+public://beam-beam section
+  std::tuple<double,double> min_max(unsigned) const;
+  std::tuple<double,std::vector<double>,std::vector<double>> hist(unsigned, unsigned) const;
+  slice_type set_longitudinal_slice_equal_area(unsigned zslice, unsigned resolution=10, const std::string &slice_center_pos="centroid") const;
+  slice_type set_longitudinal_slice_specified(const std::vector<double> &, const std::string &slice_center_pos="centroid") const;
+public:
+  double luminosity_without_beambeam(const ThinStrongBeam &);
+  double luminosity_without_beambeam(const GaussianStrongBeam &);
+  std::vector<double> luminosity_beambeam_parameter(const ThinStrongBeam &, const std::vector<double> &);
+  std::vector<double> luminosity_beambeam_parameter(const GaussianStrongBeam &, const std::vector<double> &);
+  void write_to_file(const std::string &, unsigned) const;
+public:
+  Beam& set_comm_null(){_comm=MPI_COMM_NULL;return *this;}
+  Beam& set_comm_world(){_comm=MPI_COMM_WORLD;return *this;}
+  Beam& set_comm(MPI_Comm comm){_comm=comm;return *this;}
+  MPI_Comm get_comm()const{return _comm;}
+  unsigned get_beg()const{return _beg;}
+  unsigned get_end()const{return _end;}
+  unsigned get_total()const{return Nmacro;}
+private:
+  std::vector<double> x,px,y,py,z,pz;
+  unsigned Nmacro;
+  std::vector<double>* ptr_coord[6];
+  MPI_Comm _comm;
+  int _rank=-1,_size=-1;
+  unsigned _beg=0,_end=0;
+  static double cutoff;
+};
+
+template<typename...Args>
+double Beam::Pass(const AccBase& ele, Args&&... args){
+  double luminosity=0.0;
+  luminosity+=Pass(ele);
+  luminosity+=Pass(std::forward<Args>(args)...);
+  return luminosity;
+}
+template<typename...Args>
+double Beam::RPass(const AccBase& ele, Args&&... args){
+  double luminosity=0.0;
+  luminosity+=RPass(ele);
+  luminosity+=RPass(std::forward<Args>(args)...);
+  return luminosity;
+}
+
+class ThinStrongBeam: public AccBase{
+public:
+  friend std::ostream& operator<<(std::ostream &, const ThinStrongBeam &);
+public:
+  ThinStrongBeam()=default;
+  ThinStrongBeam(double strength, const std::vector<double> &beta, const std::vector<double> &alpha, 
+	  const std::vector<double> &sigma, double zbeam=0.0, double L=0.0, const std::string &name=std::string()):
+	AccBase(L,name),sigxo(sigma[0]),sigyo(sigma[1]),betxo(beta[0]),betyo(beta[1]),alfxo(alpha[0]),alfyo(alpha[1]),kbb(strength),zo(zbeam){
+	  gamxo=(1.0+alfxo*alfxo)/betxo;
+	  gamyo=(1.0+alfyo*alfyo)/betyo;
+	  emitx=sigxo*sigxo/betxo;
+	  emity=sigyo*sigyo/betyo;
+	}
+  ThinStrongBeam & set_slice_strength(double k){
+      kbb=k;
+      return *this;
+  }
+  double get_slice_strength() const{
+      return kbb;
+  }
+  ThinStrongBeam & set_slice_center(double x, double y, double z){
+      xo=x;yo=y;zo=z;
+      return *this;
+  }
+  ThinStrongBeam & set_slice_center_x(double x){
+      xo=x;
+      return *this;
+  }
+  ThinStrongBeam & set_slice_center_y(double y){
+      yo=y;
+      return *this;
+  }
+  ThinStrongBeam & set_slice_center_z(double z){
+      zo=z;
+      return *this;
+  }
+  virtual double Pass(double &, double &, double &, double &, double &, double &) const;
+  virtual double RPass(double &x, double &px, double &y, double &py, double &z, double &pz) const{
+      return Pass(x,px,y,py,z,pz);
+  }
+  double luminosity_without_beambeam(const double&, const double &, const double &, const double &, const double &, const double &) const;
+  std::vector<double> luminosity_beambeam_parameter(const double&, const double &, const double &, const double &, const double &, const double &,
+          const std::vector<double> &) const;
+private:
+  double sigxo,sigyo,betxo,alfxo,betyo,alfyo,gamxo,gamyo,emitx,emity;
+  double kbb;
+  double xo=0.0,yo=0.0,zo=0.0;
+};
+
+double erfinv(double);
+
+class GaussianStrongBeam: public AccBase{
+public:
+  friend std::ostream& operator<<(std::ostream &, const GaussianStrongBeam &);
+  GaussianStrongBeam()=default;
+  GaussianStrongBeam(int n, const ThinStrongBeam &b):ns(n),slice_center(n),slice_weight(n),tsb(b){}
+  GaussianStrongBeam & set_equal_area(double);
+  GaussianStrongBeam & set_equal_width(double, double);
+  virtual double Pass(double &x, double &px, double &y, double &py, double &z, double &pz) const{
+      double kbb=tsb.get_slice_strength();
+      double lum=0.0;
+      for(int i=ns-1;i>=0;--i){
+          tsb.set_slice_center_z(slice_center[i]);
+          tsb.set_slice_strength(kbb*slice_weight[i]);
+          lum+=tsb.Pass(x,px,y,py,z,pz)*slice_weight[i];
+      }
+      tsb.set_slice_strength(kbb);
+      tsb.set_slice_center_z(0.0);
+      return lum;
+  }
+  virtual double RPass(double &x, double &px, double &y, double &py, double &z, double &pz) const{
+      double kbb=tsb.get_slice_strength();
+      double lum=0.0;
+      for(int i=0;i<ns;++i){
+          tsb.set_slice_center_z(-slice_center[i]);
+          tsb.set_slice_strength(kbb*slice_weight[i]);
+          lum+=tsb.RPass(x,px,y,py,z,pz)*slice_weight[i];
+      }
+      tsb.set_slice_strength(kbb);
+      tsb.set_slice_center_z(0.0);
+      return lum;
+  }
+  double luminosity_without_beambeam(const double &x, const double &px, const double &y, const double &py, const double &z, const double &pz) const{
+      double kbb=tsb.get_slice_strength();
+      double lum=0.0;
+      for(int i=ns-1;i>=0;--i){
+          tsb.set_slice_center_z(slice_center[i]);
+          tsb.set_slice_strength(kbb*slice_weight[i]);
+          lum+=tsb.luminosity_without_beambeam(x,px,y,py,z,pz)*slice_weight[i];
+      }
+      tsb.set_slice_strength(kbb);
+      tsb.set_slice_center_z(0.0);
+      return lum;
+  }
+  std::vector<double> luminosity_beambeam_parameter(const double &x, const double &px, const double &y, const double &py, const double &z, const double &pz,
+          const std::vector<double> &twiss) const{
+      double kbb=tsb.get_slice_strength();
+      std::vector<double> ret={0.0,0.0,0.0};
+      for(int i=ns-1;i>=0;--i){
+          tsb.set_slice_center_z(slice_center[i]);
+          tsb.set_slice_strength(kbb*slice_weight[i]);
+          auto v=tsb.luminosity_beambeam_parameter(x,px,y,py,z,pz,twiss);
+          ret[0]+=slice_weight[i]*v[0];
+          ret[1]+=v[1];
+          ret[2]+=v[2];
+      }
+      tsb.set_slice_strength(kbb);
+      tsb.set_slice_center_z(0.0);
+      return ret;
+  }
+private:
+  int ns;
+  std::vector<double> slice_center;
+  std::vector<double> slice_weight;
+  mutable ThinStrongBeam tsb;
+};
+
+int gaussian_beambeam_kick(double &, double &, double, double, double, double);
+
+double beam_beam(Beam &, const Beam::slice_type &, Beam&, const Beam::slice_type &, const Poisson_Solver::solver_base &);
+
+#endif
