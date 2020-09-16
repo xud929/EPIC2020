@@ -5,9 +5,11 @@
 #include<random>
 #include<trng/mt19937.hpp>
 #include<trng/truncated_normal_dist.hpp>
+#include<trng/normal_dist.hpp>
 #include<array>
 #include<iostream>
 #include<tuple>
+#include<map>
 #include"acc_base.h"
 #include"poisson_solver.h"
 
@@ -19,19 +21,30 @@ class Beam{
 public:
   using slice_type=std::tuple<double,std::vector<double>,std::vector<double>,std::vector<double>,std::vector<std::vector<unsigned>>>;
   Beam()=default;
-  Beam(unsigned, const std::array<double,3>&, const std::array<double,2>&, const std::array<double,3>&, trng::mt19937&, MPI_Comm comm=MPI_COMM_NULL);
-  Beam(unsigned, const std::array<double,3>&, const std::array<double,2>&, const std::array<double,3>&, unsigned, MPI_Comm comm=MPI_COMM_NULL);
-  Beam& generate(trng::mt19937&);
+  Beam(unsigned, const std::array<double,3>&, const std::array<double,2>&, const std::array<double,3>&, MPI_Comm comm=MPI_COMM_NULL);
+  Beam(const Beam &tb)=delete;
+  Beam& operator=(const Beam &)=delete;
+  Beam& generate();
   Beam& normalize(const std::array<double,3>&, const std::array<double,2>&, const std::array<double,3>&);
   //Beam(unsigned, const std::vector<double>&, const std::vector<double>&, const std::vector<double>&, unsigned, int);
-  static void set_cutoff(double);
   double get_mean(unsigned) const;
   double get_variance(unsigned,unsigned) const;
   double get_emittance(unsigned) const;
   std::vector<double> get_statistics() const;
   const std::vector<double> &get_coordinate(unsigned d) const{return *(ptr_coord[d]);}
-  const double &get_coordinate(unsigned d, unsigned ind) const{return (*(ptr_coord[d]))[ind];}
-  void set_coordinate(unsigned d, unsigned ind, double xx){(*(ptr_coord[d]))[ind]=xx;}
+  const double &get_coordinate(unsigned d, unsigned ind) const{return (ptr_coord[d])->at(ind);}
+  void set_coordinate(unsigned d, unsigned ind, double xx){(ptr_coord[d])->at(ind)=xx;}
+  Beam& add_offset(unsigned d, double inc){
+      std::vector<double> &v=*(ptr_coord[d]);
+      for(auto & i : v)
+          i+=inc;
+      return *this;
+  }
+  Beam& add_offset(const std::array<double,6> &inc){
+      for(unsigned i=0;i<6;++i)
+          add_offset(i,inc[i]);
+      return *this;
+  }
   double Pass(const AccBase&);
   double RPass(const AccBase&);
   template<typename...Args>
@@ -62,6 +75,10 @@ public:
   unsigned get_beg()const{return _beg;}
   unsigned get_end()const{return _end;}
   unsigned get_total()const{return Nmacro;}
+  static void set_cutoff(double);
+  static void set_rng(unsigned long seed){mt.seed(seed);}
+  static void set_rng(trng::mt19937 e){mt=e;}
+  static trng::mt19937& get_rng(){return mt;}
 private:
   std::vector<double> x,px,y,py,z,pz;
   unsigned Nmacro;
@@ -70,6 +87,7 @@ private:
   int _rank=-1,_size=-1;
   unsigned _beg=0,_end=0;
   static double cutoff;
+  static trng::mt19937 mt;
 };
 
 template<typename...Args>
@@ -100,6 +118,22 @@ public:
 	  emitx=sigxo*sigxo/betxo;
 	  emity=sigyo*sigyo/betyo;
 	}
+  void set_beam_size(const std::string &input, const std::vector<double> &sigma, const std::vector<double> &params, int n);
+  void set_beam_size(double sx, double sy){
+      sigxo=sx;sigyo=sy;
+	  emitx=sigxo*sigxo/betxo;
+	  emity=sigyo*sigyo/betyo;
+  }
+  double get_beam_size(int d) const{
+      switch(d){
+          case 0:
+              return sigxo;
+          case 1:
+              return sigyo;
+          default:
+              return 0.0;;
+      }
+  }
   ThinStrongBeam & set_slice_strength(double k){
       kbb=k;
       return *this;
@@ -134,6 +168,10 @@ private:
   double sigxo,sigyo,betxo,alfxo,betyo,alfyo,gamxo,gamyo,emitx,emity;
   double kbb;
   double xo=0.0,yo=0.0,zo=0.0;
+  enum SizeGrowthOption{SGO_Invalid,SGO_Linear,SGO_SIN,SGO_WhiteNoise};
+  std::map<std::string,SizeGrowthOption> SGO_dict{{"linear",SGO_Linear},{"sin",SGO_SIN},{"white-noise",SGO_WhiteNoise}};
+public:
+  SizeGrowthOption resolveSGO(const std::string &input);
 };
 
 double erfinv(double);
@@ -145,6 +183,9 @@ public:
   GaussianStrongBeam(int n, const ThinStrongBeam &b):ns(n),slice_center(n),slice_weight(n),tsb(b){}
   GaussianStrongBeam & set_equal_area(double);
   GaussianStrongBeam & set_equal_width(double, double);
+  ThinStrongBeam& get_tsb(){return tsb;}
+  const std::vector<double> & get_slice_center() const{return slice_center;}
+  const std::vector<double> & get_slice_weight() const{return slice_weight;}
   virtual double Pass(double &x, double &px, double &y, double &py, double &z, double &pz) const{
       double kbb=tsb.get_slice_strength();
       double lum=0.0;

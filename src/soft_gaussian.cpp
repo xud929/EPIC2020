@@ -41,7 +41,6 @@ int main(int argc, char* argv[]){
 
     //Global
     double angle=DBL0(Global,half_crossing_angle);
-    trng::mt19937 mt;
     unsigned long seed=INT0(Global,seed);
     if(seed==0){
         if(rank==0){
@@ -50,7 +49,7 @@ int main(int argc, char* argv[]){
         }
     }
     MPI_Bcast(&seed,1,MPI_UNSIGNED,0,MPI_COMM_WORLD);
-    mt.seed(seed);
+    Beam::set_rng(seed);
     const int total_turns=INT0(Global,total_turns);
     const int output_turns=INT0(Global,output_turns);
     const int gaussian_when_luminosity=INT0(Global,gaussian_when_luminosity);
@@ -67,6 +66,15 @@ int main(int argc, char* argv[]){
     double beam1_lorentz_factor=DBL0(Beam1,energy)/DBL0(Beam1,mass);
     double beam1_r0=phys_const::re*phys_const::me0/DBL0(Beam1,mass);
     string mom_out1=STR0(Beam1,output_moments);
+    int beam1_replace_turn=-1;
+    IFININT0(beam1_replace_turn,Beam1,replace_turn);
+    std::array<double,6> beam1_replace={0.0};
+    IFINDBL0(beam1_replace[0],Beam1,replace_offset);
+    IFINDBL1(beam1_replace[2],Beam1,replace_offset);
+    IFINDBL2(beam1_replace[4],Beam1,replace_offset);
+    IFINDBL0(beam1_replace[1],Beam1,replace_angle);
+    IFINDBL1(beam1_replace[3],Beam1,replace_angle);
+    IFINDBL2(beam1_replace[5],Beam1,replace_angle);
 
     int zslice1=INT0(Beam1,zslice),res1=10;
     vector<double> beam1_normalized_boundary;
@@ -81,7 +89,7 @@ int main(int argc, char* argv[]){
     }else
         throw std::runtime_error("Unknown slice method.");
 
-    Beam wb1(beam1_n_macro,beam1_beta,beam1_alpha,beam1_sigma,mt,MPI_COMM_WORLD);
+    Beam wb1(beam1_n_macro,beam1_beta,beam1_alpha,beam1_sigma,MPI_COMM_WORLD);
 
     string beam1_output="";
     int beam1_output_start=0,beam1_output_end=0,beam1_output_step=1,beam1_output_npart=0;
@@ -103,6 +111,15 @@ int main(int argc, char* argv[]){
     double beam2_lorentz_factor=DBL0(Beam2,energy)/DBL0(Beam2,mass);
     double beam2_r0=phys_const::re*phys_const::me0/DBL0(Beam2,mass);
     string mom_out2=STR0(Beam2,output_moments);
+    int beam2_replace_turn=-1;
+    IFININT0(beam2_replace_turn,Beam2,replace_turn);
+    std::array<double,6> beam2_replace={0.0};
+    IFINDBL0(beam2_replace[0],Beam2,replace_offset);
+    IFINDBL1(beam2_replace[1],Beam2,replace_offset);
+    IFINDBL2(beam2_replace[2],Beam2,replace_offset);
+    IFINDBL0(beam2_replace[3],Beam2,replace_angle);
+    IFINDBL1(beam2_replace[4],Beam2,replace_angle);
+    IFINDBL2(beam2_replace[5],Beam2,replace_angle);
 
     int zslice2=INT0(Beam2,zslice),res2=10;
     vector<double> beam2_normalized_boundary;
@@ -117,7 +134,7 @@ int main(int argc, char* argv[]){
     }else
         throw std::runtime_error("Unknown slice method.");
 
-    Beam wb2(beam2_n_macro,beam2_beta,beam2_alpha,beam2_sigma,mt,MPI_COMM_WORLD);
+    Beam wb2(beam2_n_macro,beam2_beta,beam2_alpha,beam2_sigma,MPI_COMM_WORLD);
 
     string beam2_output="";
     int beam2_output_start=0,beam2_output_end=0,beam2_output_step=1,beam2_output_npart=0;
@@ -318,6 +335,14 @@ int main(int argc, char* argv[]){
     //auto vv=wb2.get_coordinate(4);
     while(current_turn<total_turns){
         for(int i=0;i<output_turns;++i){
+            if(current_turn+i==beam1_replace_turn){
+                wb1.generate().normalize(beam1_beta,beam1_alpha,beam1_sigma);
+                wb1.add_offset(beam1_replace);
+            }
+            if(current_turn+i==beam2_replace_turn){
+                wb2.generate().normalize(beam2_beta,beam2_alpha,beam2_sigma);
+                wb2.add_offset(beam2_replace);
+            }
             wb1.Pass(MX11,tccb1,MX21,lb);
             wb2.Pass(MX12,tccb2,MX22,lb);
             Beam::slice_type temp_ret1, temp_ret2;
@@ -334,8 +359,8 @@ int main(int argc, char* argv[]){
             else
                 throw std::runtime_error("Unknown slice method.");
             luminosity[i]=beam_beam(wb1,temp_ret1,wb2,temp_ret2,sg);
-            wb1.Pass(rlb,MX31,tcca1,MX41,ot1);rad1.do_for(wb1,mt);
-            wb2.Pass(rlb,MX32,tcca2,MX42,ot2);rad2.do_for(wb2,mt);
+            wb1.Pass(rlb,MX31,tcca1,MX41,ot1);rad1.do_for(wb1);
+            wb2.Pass(rlb,MX32,tcca2,MX42,ot2);rad2.do_for(wb2);
             turns[i]=current_turn+i+1;
             beam1_data[i]=wb1.get_statistics();
             beam2_data[i]=wb2.get_statistics();

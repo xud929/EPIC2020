@@ -18,6 +18,7 @@ public:
     // beam1: coord, weight, S1, 
     // beam2: {mean_x, sigma_x, ... }, S2
     double slice_slice_kick(std::vector<double> &, const std::vector<double> &, double, const std::array<double,10> &, double, const std::tuple<unsigned,double> &) const;
+    double slice_slice_kick_no_interpolation(std::vector<double> &, const std::array<double,10> &, double, const std::tuple<unsigned,double> &) const;
 private:
     double kbb1,klum1,kbb2,klum2;
     unsigned gaussian_when_luminosity;

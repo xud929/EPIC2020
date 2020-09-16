@@ -21,7 +21,7 @@ public:
     LumpedRad &turn_off_damping(){is_damping=false;return *this;}
     LumpedRad &turn_on_excitation(){is_excitation=true;return *this;}
     LumpedRad &turn_off_excitation(){is_excitation=false;return *this;}
-    void do_for(Beam &, trng::mt19937 &) const;
+    void do_for(Beam &) const;
     /*
     double do_for(Beam&) const{
         if(!is_damping && !is_excitation){

@@ -9,6 +9,7 @@
 #include<tuple>
 #include<cassert>
 #include<string>
+#include<fstream>
 
 /*Defined in poisson_solver.cpp*/
 std::tuple<double,double> center_moments(std::vector<double>::const_iterator beg, std::vector<double>::const_iterator end, MPI_Comm comm);
@@ -253,23 +254,33 @@ double beam_beam(Beam &beam1, const Beam::slice_type &slice_ret1, Beam &beam2, c
     const auto & [total1,center1,weight1,boundary1,index1]=slice_ret1;
     const auto & [total2,center2,weight2,boundary2,index2]=slice_ret2;
 
+    /*20200903*/
     /*
-    int rank=-1;
+    int rank=-1,size=-1;
     MPI_Comm_rank(MPI_COMM_WORLD,&rank);
+    MPI_Comm_size(MPI_COMM_WORLD,&size);
+    */
+    /*-------*/
+    /*20200903*/
+    /*
     if(rank==0){
-        std::cout<<center1.size()<<"\t";
-        std::cout<<weight1.size()<<"\t";
-        std::cout<<center2.size()<<"\t";
-        std::cout<<weight2.size()<<"\t";
+        //std::cout<<center1.size()<<"\t";
+        //std::cout<<weight1.size()<<"\t";
+        //std::cout<<center2.size()<<"\t";
+        //std::cout<<weight2.size()<<"\t";
+        //std::cout<<std::endl;
+        //for(const auto & i : weight1)
+            //std::cout<<i<<"\t";
+        //std::cout<<std::endl;
+        //for(const auto & i : weight2)
+            //std::cout<<i<<"\t";
+        //std::cout<<"\n"<<std::endl;
+        for(unsigned i=0;i<center1.size();++i)
+            std::cout<<center1[i]<<"\t"<<weight1[i]<<"\n";
         std::cout<<std::endl;
-        for(const auto & i : weight1)
-            std::cout<<i<<"\t";
-        std::cout<<std::endl;
-        for(const auto & i : weight2)
-            std::cout<<i<<"\t";
-        std::cout<<"\n"<<std::endl;
     }
     */
+    /*-------*/
 
 
     const unsigned ns1=center1.size(), ns2=center2.size();
@@ -302,7 +313,51 @@ double beam_beam(Beam &beam1, const Beam::slice_type &slice_ret1, Beam &beam2, c
         std::array<double,4> param1{weight1[s1],boundary1[s1],center1[s1],boundary1[s1+1]};
         std::array<double,4> param2{weight2[s2],boundary2[s2],center2[s2],boundary2[s2+1]};
 
+        /*20200903*/
+        /*
+        if(rank==0){
+            std::ofstream out("log.txt",std::ofstream::app);
+            //std::ostream &out=std::cout;
+            out.flags(std::ios::scientific);
+            out.precision(20);
+            out<<s1<<"\t";
+            for(const auto & i : param1)
+                out<<i<<"\t";
+            out<<std::endl;
+            out<<s2<<"\t";
+            for(const auto & i : param2)
+                out<<i<<"\t";
+            out<<std::endl;
+            out.close();
+        }
+        MPI_File fh;
+        MPI_File_open(MPI_COMM_WORLD,"2_before.txt",MPI_MODE_CREATE|MPI_MODE_WRONLY|MPI_MODE_APPEND,MPI_INFO_NULL,&fh);
+        MPI_Offset cur;
+        MPI_File_get_position(fh,&cur);
+        unsigned t1pos=0,t2pos=coord2[s2].size();
+        if(rank!=0){
+            MPI_Recv(&t1pos,1,MPI_UNSIGNED,rank-1,0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+            t2pos+=t1pos;
+        }
+        if(rank<size-1){
+            MPI_Send(&t2pos,1,MPI_UNSIGNED,rank+1,0,MPI_COMM_WORLD);
+        }
+        unsigned ttlen=t2pos-t1pos;
+        MPI_File_write_at_all(fh,cur+t1pos*sizeof(double)+rank*sizeof(unsigned),&ttlen,sizeof(unsigned),MPI_CHAR,MPI_STATUS_IGNORE);
+        MPI_File_write_at_all(fh,cur+t1pos*sizeof(double)+(rank+1)*sizeof(unsigned),coord2[s2].data(),sizeof(double)*coord2[s2].size(),MPI_CHAR,MPI_STATUS_IGNORE);
+        MPI_File_close(&fh);
+        */
+        /*-------*/
         ret_lum+=ps(coord1[s1],param1,beam1.get_comm(),coord2[s2],param2,beam2.get_comm());
+        /*20200903*/
+        /*
+        MPI_File_open(MPI_COMM_WORLD,"2_after.txt",MPI_MODE_CREATE|MPI_MODE_WRONLY|MPI_MODE_APPEND,MPI_INFO_NULL,&fh);
+        MPI_File_get_position(fh,&cur);
+        MPI_File_write_at_all(fh,cur+t1pos*sizeof(double)+rank*sizeof(unsigned),&ttlen,sizeof(unsigned),MPI_CHAR,MPI_STATUS_IGNORE);
+        MPI_File_write_at_all(fh,cur+t1pos*sizeof(double)+(rank+1)*sizeof(unsigned),coord2[s2].data(),sizeof(double)*coord2[s2].size(),MPI_CHAR,MPI_STATUS_IGNORE);
+        MPI_File_close(&fh);
+        */
+        /*-------*/
 
     }
 

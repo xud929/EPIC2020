@@ -13,6 +13,7 @@
 #include<algorithm>
 #include<iterator>
 #include<unordered_map>
+#include<map>
 
 using std::vector;
 using std::cin;using std::cout;using std::cerr;using std::endl;
@@ -21,6 +22,7 @@ using std::unordered_map;
 
 int input(const string &, const string &begin);
 std::ostream& output(std::ostream &);
+
 
 int main(int argc, char* argv[]){
     MPI_Init(&argc, &argv);
@@ -40,7 +42,6 @@ int main(int argc, char* argv[]){
 
     //Global
     double angle=DBL0(Global,half_crossing_angle);
-    std::mt19937 mt;
     unsigned seed=INT0(Global,seed);
     if(seed==0){
         if(rank==0){
@@ -49,7 +50,7 @@ int main(int argc, char* argv[]){
         }
     }
     MPI_Bcast(&seed,1,MPI_UNSIGNED,0,MPI_COMM_WORLD);
-    mt.seed(seed);
+    Beam::set_rng(seed);
     const int total_turns=INT0(Global,total_turns);
     const int output_turns=INT0(Global,output_turns);
     string data_out;
@@ -64,7 +65,7 @@ int main(int argc, char* argv[]){
     double weak_charge=DBL0(WeakBeam,charge);
     double weak_lorentz_factor=DBL0(WeakBeam,energy)/DBL0(WeakBeam,mass);
     double weak_r0=phys_const::re*phys_const::me0/DBL0(WeakBeam,mass);
-    Beam wb(weak_n_macro,weak_beta,weak_alpha,weak_sigma,mt,MPI_COMM_WORLD);
+    Beam wb(weak_n_macro,weak_beta,weak_alpha,weak_sigma,MPI_COMM_WORLD);
     string weak_output="";
     int weak_output_start=0,weak_output_end=0,weak_output_step=1,weak_output_npart=0;
     IFINSTR0(weak_output,WeakBeam,output);
@@ -87,6 +88,15 @@ int main(int argc, char* argv[]){
     vector<double> strong_sigma={DBL0(GaussianStrongBeam,sizes),DBL1(GaussianStrongBeam,sizes)};
     int strong_zslice=INT0(GaussianStrongBeam,zslice);
     double strong_sigz=DBL2(GaussianStrongBeam,sizes);
+    string strong_growth_method="";
+    vector<double> strong_growth_params;
+    IFINSTR0(strong_growth_method,GaussianStrongBeam,growth_method);
+    if(!strong_growth_method.empty()){
+        string tscope="GaussianStrongBeam",tfield="growth_params";
+        int num=bbp::count_index<double>(tscope,tfield);
+        for(int i=0;i<num;++i)
+            strong_growth_params.push_back(bbp::get<double>(tscope,tfield,i));
+    }
     string strong_method="equal_area";
     IFINSTR0(strong_method,GaussianStrongBeam,slice_method);
     ThinStrongBeam tsb(kbb,strong_beta,strong_alpha,strong_sigma);
@@ -172,10 +182,10 @@ int main(int argc, char* argv[]){
     RevLorentzBoost rlb(angle);
 
     //Linear6D (one turn map)
-    vector<double> ot_beta={DBL0(OneTurn,beta),DBL1(OneTurn,beta),DBL2(OneTurn,beta)};
-    vector<double> ot_alpha={DBL0(OneTurn,alpha),DBL1(OneTurn,alpha)};
-    vector<double> ot_tune={DBL0(OneTurn,tune),DBL1(OneTurn,tune),DBL2(OneTurn,tune)};
-    vector<double> ot_xi={DBL0(OneTurn,chromaticity),DBL1(OneTurn,chromaticity)};
+    std::array<double,3> ot_beta={DBL0(OneTurn,beta),DBL1(OneTurn,beta),DBL2(OneTurn,beta)};
+    std::array<double,2> ot_alpha={DBL0(OneTurn,alpha),DBL1(OneTurn,alpha)};
+    std::array<double,3> ot_tune={DBL0(OneTurn,tune),DBL1(OneTurn,tune),DBL2(OneTurn,tune)};
+    std::array<double,2> ot_xi={DBL0(OneTurn,chromaticity),DBL1(OneTurn,chromaticity)};
     Linear6D ot(ot_beta,ot_alpha,ot_tune,ot_xi);
 
     vector<double> beam_data_first=wb.get_statistics();
@@ -210,6 +220,16 @@ int main(int argc, char* argv[]){
 
     while(current_turn<total_turns){
         for(int i=0;i<output_turns;++i){
+            if(!strong_growth_method.empty()){
+                gsb.get_tsb().set_beam_size(strong_growth_method,strong_sigma,strong_growth_params,current_turn+i);
+                /*
+                if(rank==0){
+                    cout.precision(16);
+                    cout.flags(std::ios::scientific);
+                    cout<<gsb.get_tsb().get_beam_size(0)<<"\t"<<gsb.get_tsb().get_beam_size(1)<<endl;
+                }
+                */
+            }
             wb.Pass(MX1,tccb,MX2,lb);
             double lum=wb.Pass(gsb);
             wb.Pass(rlb,MX3,tcca,MX4,ot);

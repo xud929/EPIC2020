@@ -12,6 +12,7 @@ using std::vector;
 using std::complex;
 
 double Beam::cutoff=5.0;
+trng::mt19937 Beam::mt;
 /* if |(sigy-sigx)/(sigy+sigx)|<round_beam_threshold
  * then use round beam formula to calculate beam-beam kick
  * and second order derivative */
@@ -38,7 +39,9 @@ std::array<double,2> moments(const vector<double> &v, unsigned totalN, MPI_Comm 
 }
 /************************************************************************************************************************************************/
 
-Beam& Beam::generate(trng::mt19937 &mt){
+Beam& Beam::generate(){
+  if(_comm==MPI_COMM_NULL)
+      return *this;
   MPI_Comm_rank(_comm, &_rank);
   MPI_Comm_size(_comm, &_size);
   _beg=_rank*Nmacro/_size;_end=(_rank+1)*Nmacro/_size;
@@ -77,28 +80,9 @@ Beam& Beam::normalize(const std::array<double,3> &beta, const std::array<double,
   return *this;
 }
 
-Beam::Beam(unsigned totalN, const std::array<double,3> &beta, const std::array<double,2> &alpha, const std::array<double,3> &sigma, trng::mt19937 &mt, MPI_Comm comm):
+Beam::Beam(unsigned totalN, const std::array<double,3> &beta, const std::array<double,2> &alpha, const std::array<double,3> &sigma, MPI_Comm comm):
     Nmacro(totalN),_comm(comm){
-  if(_comm==MPI_COMM_NULL)
-      return;
-  generate(mt).normalize(beta,alpha,sigma);
-}
-
-Beam::Beam(unsigned totalN, const std::array<double,3> &beta, const std::array<double,2> &alpha, const std::array<double,3> &sigma, unsigned seed, MPI_Comm comm):
-    Nmacro(totalN),_comm(comm){
-  if(_comm==MPI_COMM_NULL)
-      return;
-
-  trng::mt19937 mt;
-  std::random_device rd;
-  if(seed==0){
-	seed=rd();
-  }
-  MPI_Bcast(&seed,1,MPI_UNSIGNED,0,_comm);
-  mt.seed(static_cast<unsigned long>(seed));
-
-  generate(mt).normalize(beta,alpha,sigma);
-  
+  generate().normalize(beta,alpha,sigma);
 }
 
 /*
@@ -410,6 +394,40 @@ int gaussian_beambeam_kick(double &Kx, double &Ky, double sigx, double sigy, dou
   Ky=temp*y/sigy;
 #endif
   return 0;
+}
+
+/************************************************************************************************************************************************/
+ThinStrongBeam::SizeGrowthOption ThinStrongBeam::resolveSGO(const std::string &input){
+  auto itr=SGO_dict.find(input);
+  if(itr!=SGO_dict.end())
+      return itr->second;
+  else
+      return SGO_Invalid;
+}
+void ThinStrongBeam::set_beam_size(const std::string &input, const std::vector<double> &sigma, const std::vector<double> &params, int n){
+    double sx=sigma[0], sy=sigma[1];
+    switch(resolveSGO(input)){
+        case SGO_Linear:
+            sx*=1.0+params[0]*n;
+            sy*=1.0+params[1]*n;
+            break;
+        case SGO_SIN:
+            sx*=1.0+params[0]*std::sin(2.0*M_PI*n*params[1]);
+            sy*=1.0+params[2]*std::sin(2.0*M_PI*n*params[3]);
+            break;
+        case SGO_WhiteNoise:
+            {
+                trng::normal_dist<double> nX(params[0],params[1]),nY(params[2],params[3]);
+                sx*=1.0+nX(Beam::get_rng());
+                sy*=1.0+nY(Beam::get_rng());
+            }
+            break;
+        case SGO_Invalid:
+            break;
+    }
+    sigxo=sx;sigyo=sy;
+    emitx=sigxo*sigxo/betxo;
+    emity=sigyo*sigyo/betyo;
 }
 
 /************************************************************************************************************************************************/

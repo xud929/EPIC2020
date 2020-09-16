@@ -31,7 +31,8 @@ LumpedRad::LumpedRad(const std::array<double,3> &turns, const std::array<double,
     }
 }
 
-void LumpedRad::do_for(Beam &beam, trng::mt19937 &mt) const{
+void LumpedRad::do_for(Beam &beam) const{
+    trng::mt19937 &mt=beam.get_rng();
     if(beam.get_comm()==MPI_COMM_NULL)
         return;
     unsigned beg=beam.get_beg(),end=beam.get_end(),totalN=beam.get_total(),N=end-beg;
