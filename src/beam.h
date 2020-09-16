@@ -31,6 +31,18 @@ public:
   double get_variance(unsigned,unsigned) const;
   double get_emittance(unsigned) const;
   std::vector<double> get_statistics() const;
+  double& _x_(unsigned i){return x[i];}
+  double& _px_(unsigned i){return px[i];}
+  double& _y_(unsigned i){return y[i];}
+  double& _py_(unsigned i){return py[i];}
+  double& _z_(unsigned i){return z[i];}
+  double& _pz_(unsigned i){return pz[i];}
+  const double& _x_(unsigned i) const{return x[i];}
+  const double& _px_(unsigned i) const{return px[i];}
+  const double& _y_(unsigned i) const{return y[i];}
+  const double& _py_(unsigned i) const{return py[i];}
+  const double& _z_(unsigned i) const{return z[i];}
+  const double& _pz_(unsigned i) const{return pz[i];}
   const std::vector<double> &get_coordinate(unsigned d) const{return *(ptr_coord[d]);}
   const double &get_coordinate(unsigned d, unsigned ind) const{return (ptr_coord[d])->at(ind);}
   void set_coordinate(unsigned d, unsigned ind, double xx){(ptr_coord[d])->at(ind)=xx;}
@@ -45,8 +57,8 @@ public:
           add_offset(i,inc[i]);
       return *this;
   }
-  double Pass(const AccBase&);
-  double RPass(const AccBase&);
+  double Pass(const AccBase &ele){return ele.Pass(*this);}
+  double RPass(const AccBase &ele){return ele.RPass(*this);}
   template<typename...Args>
   double Pass(const AccBase&, Args&&...);
   template<typename...Args>
@@ -161,6 +173,8 @@ public:
   virtual double RPass(double &x, double &px, double &y, double &py, double &z, double &pz) const{
       return Pass(x,px,y,py,z,pz);
   }
+  virtual double Pass(Beam&) const;
+  virtual double RPass(Beam&) const;
   double luminosity_without_beambeam(const double&, const double &, const double &, const double &, const double &, const double &) const;
   std::vector<double> luminosity_beambeam_parameter(const double&, const double &, const double &, const double &, const double &, const double &,
           const std::vector<double> &) const;
@@ -210,6 +224,8 @@ public:
       tsb.set_slice_center_z(0.0);
       return lum;
   }
+  virtual double Pass(Beam&) const;
+  virtual double RPass(Beam&) const;
   double luminosity_without_beambeam(const double &x, const double &px, const double &y, const double &py, const double &z, const double &pz) const{
       double kbb=tsb.get_slice_strength();
       double lum=0.0;

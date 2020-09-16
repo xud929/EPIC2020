@@ -230,6 +230,54 @@ double Beam::get_emittance(unsigned d) const{
   else
 	return sqrt(sum);
 }
+
+double AccBase::Pass(Beam &b) const{
+    unsigned N=b.get_end()-b.get_beg();
+    double luminosity=0.0;
+    for(unsigned i=0;i<N;++i)
+        luminosity+=Pass(b._x_(i),b._px_(i),b._y_(i),b._py_(i),b._z_(i),b._pz_(i));
+    return luminosity;
+}
+double AccBase::RPass(Beam &b) const{
+    unsigned N=b.get_end()-b.get_beg();
+    double luminosity=0.0;
+    for(unsigned i=0;i<N;++i)
+        luminosity+=RPass(b._x_(i),b._px_(i),b._y_(i),b._py_(i),b._z_(i),b._pz_(i));
+    return luminosity;
+}
+double ThinStrongBeam::Pass(Beam &b) const{
+    unsigned N=b.get_end()-b.get_beg();
+    double luminosity=0.0;
+    for(unsigned i=0;i<N;++i)
+        luminosity+=Pass(b._x_(i),b._px_(i),b._y_(i),b._py_(i),b._z_(i),b._pz_(i));
+    MPI_Allreduce(MPI_IN_PLACE,&luminosity,1,MPI_DOUBLE,MPI_SUM,b.get_comm());
+    return luminosity;
+}
+double ThinStrongBeam::RPass(Beam &b) const{
+    unsigned N=b.get_end()-b.get_beg();
+    double luminosity=0.0;
+    for(unsigned i=0;i<N;++i)
+        luminosity+=Pass(b._x_(i),b._px_(i),b._y_(i),b._py_(i),b._z_(i),b._pz_(i));
+    MPI_Allreduce(MPI_IN_PLACE,&luminosity,1,MPI_DOUBLE,MPI_SUM,b.get_comm());
+    return luminosity;
+}
+double GaussianStrongBeam::Pass(Beam &b) const{
+    unsigned N=b.get_end()-b.get_beg();
+    double luminosity=0.0;
+    for(unsigned i=0;i<N;++i)
+        luminosity+=Pass(b._x_(i),b._px_(i),b._y_(i),b._py_(i),b._z_(i),b._pz_(i));
+    MPI_Allreduce(MPI_IN_PLACE,&luminosity,1,MPI_DOUBLE,MPI_SUM,b.get_comm());
+    return luminosity;
+}
+double GaussianStrongBeam::RPass(Beam &b) const{
+    unsigned N=b.get_end()-b.get_beg();
+    double luminosity=0.0;
+    for(unsigned i=0;i<N;++i)
+        luminosity+=Pass(b._x_(i),b._px_(i),b._y_(i),b._py_(i),b._z_(i),b._pz_(i));
+    MPI_Allreduce(MPI_IN_PLACE,&luminosity,1,MPI_DOUBLE,MPI_SUM,b.get_comm());
+    return luminosity;
+}
+/*
 double Beam::Pass(const AccBase& ele){
   unsigned N=x.size();
   double luminosity=0.0;
@@ -252,6 +300,7 @@ double Beam::RPass(const AccBase& ele){
       MPI_Allreduce(MPI_IN_PLACE,&luminosity,1,MPI_DOUBLE,MPI_SUM,_comm);
   return luminosity;
 }
+*/
 
 vector<double> Beam::luminosity_beambeam_parameter(const ThinStrongBeam & ele, const vector<double> &twiss){
   unsigned N=x.size();
