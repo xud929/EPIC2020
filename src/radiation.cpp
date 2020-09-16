@@ -31,10 +31,10 @@ LumpedRad::LumpedRad(const std::array<double,3> &turns, const std::array<double,
     }
 }
 
-void LumpedRad::do_for(Beam &beam) const{
+double LumpedRad::Pass(Beam &beam) const{
     trng::mt19937 &mt=beam.get_rng();
     if(beam.get_comm()==MPI_COMM_NULL)
-        return;
+        return 0.0;
     unsigned beg=beam.get_beg(),end=beam.get_end(),totalN=beam.get_total(),N=end-beg;
 
     if(is_damping){
@@ -64,4 +64,6 @@ void LumpedRad::do_for(Beam &beam) const{
             }
         }
     }
+
+    return 0.0;
 }

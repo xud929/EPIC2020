@@ -359,8 +359,8 @@ int main(int argc, char* argv[]){
             else
                 throw std::runtime_error("Unknown slice method.");
             luminosity[i]=beam_beam(wb1,temp_ret1,wb2,temp_ret2,sg);
-            wb1.Pass(rlb,MX31,tcca1,MX41,ot1);rad1.do_for(wb1);
-            wb2.Pass(rlb,MX32,tcca2,MX42,ot2);rad2.do_for(wb2);
+            wb1.Pass(rlb,MX31,tcca1,MX41,ot1,rad1);//rad1.do_for(wb1);
+            wb2.Pass(rlb,MX32,tcca2,MX42,ot2,rad2);//rad2.do_for(wb2);
             turns[i]=current_turn+i+1;
             beam1_data[i]=wb1.get_statistics();
             beam2_data[i]=wb2.get_statistics();

@@ -36,4 +36,4 @@ parser_compile:
 clean:
 	rm *.o
 	cd ../src/parser/ && make clean
-	cd ../bin && rm -f ${target}
+	cd ../bin && rm -f
