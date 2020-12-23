@@ -136,12 +136,24 @@ public:
 	  emitx=sigxo*sigxo/betxo;
 	  emity=sigyo*sigyo/betyo;
   }
+  void set_beam_centroid(const std::string &input, const std::vector<double> &params, int n);
+  void set_beam_centroid(double xx, double yy){xo=xx;yo=yy;}
   double get_beam_size(int d) const{
       switch(d){
           case 0:
               return sigxo;
           case 1:
               return sigyo;
+          default:
+              return 0.0;;
+      }
+  }
+  double get_beam_centroid(int d) const{
+      switch(d){
+          case 0:
+              return xo;
+          case 1:
+              return yo;
           default:
               return 0.0;;
       }
@@ -183,9 +195,12 @@ private:
   double kbb;
   double xo=0.0,yo=0.0,zo=0.0;
   enum SizeGrowthOption{SGO_Invalid,SGO_Linear,SGO_SIN,SGO_WhiteNoise};
+  enum CentroidGrowthOption{CGO_Invalid,CGO_Linear,CGO_SIN,CGO_COS,CGO_WhiteNoise};
   std::map<std::string,SizeGrowthOption> SGO_dict{{"linear",SGO_Linear},{"sin",SGO_SIN},{"white-noise",SGO_WhiteNoise}};
+  std::map<std::string,CentroidGrowthOption> CGO_dict{{"linear",CGO_Linear},{"sin",CGO_SIN},{"cos",CGO_COS},{"white-noise",CGO_WhiteNoise}};
 public:
   SizeGrowthOption resolveSGO(const std::string &input);
+  CentroidGrowthOption resolveCGO(const std::string &input);
 };
 
 double erfinv(double);
@@ -194,56 +209,68 @@ class GaussianStrongBeam: public AccBase{
 public:
   friend std::ostream& operator<<(std::ostream &, const GaussianStrongBeam &);
   GaussianStrongBeam()=default;
-  GaussianStrongBeam(int n, const ThinStrongBeam &b):ns(n),slice_center(n),slice_weight(n),tsb(b){}
+  GaussianStrongBeam(int n, const ThinStrongBeam &b):ns(n),slice_center(n),slice_hoffset(n,0.0),slice_voffset(n,0.0),slice_weight(n),tsb(b){}
   GaussianStrongBeam & set_equal_area(double);
   GaussianStrongBeam & set_equal_width(double, double);
+  GaussianStrongBeam & set_hvoffset(double coef, double freq, int);
   ThinStrongBeam& get_tsb(){return tsb;}
   const std::vector<double> & get_slice_center() const{return slice_center;}
   const std::vector<double> & get_slice_weight() const{return slice_weight;}
   virtual double Pass(double &x, double &px, double &y, double &py, double &z, double &pz) const{
       double kbb=tsb.get_slice_strength();
+      double x0=tsb.get_beam_centroid(0), y0=tsb.get_beam_centroid(1);
       double lum=0.0;
       for(int i=ns-1;i>=0;--i){
-          tsb.set_slice_center_z(slice_center[i]);
+          //tsb.set_slice_center_z(slice_center[i]);
+          tsb.set_slice_center(x0+slice_hoffset[i],y0+slice_voffset[i],slice_center[i]);
           tsb.set_slice_strength(kbb*slice_weight[i]);
           lum+=tsb.Pass(x,px,y,py,z,pz)*slice_weight[i];
       }
       tsb.set_slice_strength(kbb);
-      tsb.set_slice_center_z(0.0);
+      //tsb.set_slice_center_z(0.0);
+      tsb.set_slice_center(x0,y0,0.0);
       return lum;
   }
   virtual double RPass(double &x, double &px, double &y, double &py, double &z, double &pz) const{
       double kbb=tsb.get_slice_strength();
+      double x0=tsb.get_beam_centroid(0), y0=tsb.get_beam_centroid(1);
       double lum=0.0;
       for(int i=0;i<ns;++i){
-          tsb.set_slice_center_z(-slice_center[i]);
+          //tsb.set_slice_center_z(-slice_center[i]);
+          tsb.set_slice_center(x0+slice_hoffset[i],y0+slice_voffset[i],slice_center[i]);
           tsb.set_slice_strength(kbb*slice_weight[i]);
           lum+=tsb.RPass(x,px,y,py,z,pz)*slice_weight[i];
       }
       tsb.set_slice_strength(kbb);
-      tsb.set_slice_center_z(0.0);
+      //tsb.set_slice_center_z(0.0);
+      tsb.set_slice_center(x0,y0,0.0);
       return lum;
   }
   virtual double Pass(Beam&) const;
   virtual double RPass(Beam&) const;
   double luminosity_without_beambeam(const double &x, const double &px, const double &y, const double &py, const double &z, const double &pz) const{
       double kbb=tsb.get_slice_strength();
+      double x0=tsb.get_beam_centroid(0), y0=tsb.get_beam_centroid(1);
       double lum=0.0;
       for(int i=ns-1;i>=0;--i){
-          tsb.set_slice_center_z(slice_center[i]);
+          //tsb.set_slice_center_z(slice_center[i]);
+          tsb.set_slice_center(x0+slice_hoffset[i],y0+slice_voffset[i],slice_center[i]);
           tsb.set_slice_strength(kbb*slice_weight[i]);
           lum+=tsb.luminosity_without_beambeam(x,px,y,py,z,pz)*slice_weight[i];
       }
       tsb.set_slice_strength(kbb);
-      tsb.set_slice_center_z(0.0);
+      //tsb.set_slice_center_z(0.0);
+      tsb.set_slice_center(x0,y0,0.0);
       return lum;
   }
   std::vector<double> luminosity_beambeam_parameter(const double &x, const double &px, const double &y, const double &py, const double &z, const double &pz,
           const std::vector<double> &twiss) const{
       double kbb=tsb.get_slice_strength();
+      double x0=tsb.get_beam_centroid(0), y0=tsb.get_beam_centroid(1);
       std::vector<double> ret={0.0,0.0,0.0};
       for(int i=ns-1;i>=0;--i){
-          tsb.set_slice_center_z(slice_center[i]);
+          //tsb.set_slice_center_z(slice_center[i]);
+          tsb.set_slice_center(x0+slice_hoffset[i],y0+slice_voffset[i],slice_center[i]);
           tsb.set_slice_strength(kbb*slice_weight[i]);
           auto v=tsb.luminosity_beambeam_parameter(x,px,y,py,z,pz,twiss);
           ret[0]+=slice_weight[i]*v[0];
@@ -251,13 +278,16 @@ public:
           ret[2]+=v[2];
       }
       tsb.set_slice_strength(kbb);
-      tsb.set_slice_center_z(0.0);
+      //tsb.set_slice_center_z(0.0);
+      tsb.set_slice_center(x0,y0,0.0);
       return ret;
   }
 private:
   int ns;
   std::vector<double> slice_center;
   std::vector<double> slice_weight;
+  std::vector<double> slice_hoffset;
+  std::vector<double> slice_voffset;
   mutable ThinStrongBeam tsb;
 };
 

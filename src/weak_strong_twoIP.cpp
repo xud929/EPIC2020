@@ -3,6 +3,7 @@
 #include"Lorentz_boost.h"
 #include"linear_map.h"
 #include"beam.h"
+#include"radiation.h"
 #include<iostream>
 #include<fstream>
 #include<sstream>
@@ -40,7 +41,6 @@ int main(int argc, char* argv[]){
 
     //Global
     double angle=DBL0(Global,half_crossing_angle);
-    std::mt19937 mt;
     unsigned seed=INT0(Global,seed);
     if(seed==0){
         if(rank==0){
@@ -49,7 +49,7 @@ int main(int argc, char* argv[]){
         }
     }
     MPI_Bcast(&seed,1,MPI_UNSIGNED,0,MPI_COMM_WORLD);
-    mt.seed(seed);
+    Beam::set_rng(seed);
     const int total_turns=INT0(Global,total_turns);
     const int output_turns=INT0(Global,output_turns);
     string data_out;
@@ -58,13 +58,13 @@ int main(int argc, char* argv[]){
     //WeakBeam
     double weak_n_particle=DBL0(WeakBeam,n_particle);
     unsigned weak_n_macro=INT0(WeakBeam,n_macro);
-    vector<double> weak_sigma={DBL0(WeakBeam,transverse_size),DBL1(WeakBeam,transverse_size),DBL0(WeakBeam,longitudinal_size)};
-    vector<double> weak_beta={DBL0(WeakBeam,beta),DBL1(WeakBeam,beta),DBL0(WeakBeam,longitudinal_size)/DBL1(WeakBeam,longitudinal_size)};
-    vector<double> weak_alpha={DBL0(WeakBeam,alpha),DBL1(WeakBeam,alpha)};
+    std::array<double,3> weak_sigma={DBL0(WeakBeam,transverse_size),DBL1(WeakBeam,transverse_size),DBL0(WeakBeam,longitudinal_size)};
+    std::array<double,3> weak_beta={DBL0(WeakBeam,beta),DBL1(WeakBeam,beta),DBL0(WeakBeam,longitudinal_size)/DBL1(WeakBeam,longitudinal_size)};
+    std::array<double,2> weak_alpha={DBL0(WeakBeam,alpha),DBL1(WeakBeam,alpha)};
     double weak_charge=DBL0(WeakBeam,charge);
     double weak_lorentz_factor=DBL0(WeakBeam,energy)/DBL0(WeakBeam,mass);
     double weak_r0=phys_const::re*phys_const::me0/DBL0(WeakBeam,mass);
-    Beam wb(weak_n_macro,weak_beta,weak_alpha,weak_sigma,mt,MPI_COMM_WORLD);
+    Beam wb(weak_n_macro,weak_beta,weak_alpha,weak_sigma,MPI_COMM_WORLD);
     string weak_output="";
     int weak_output_start=0,weak_output_end=0,weak_output_step=1,weak_output_npart=0;
     IFINSTR0(weak_output,WeakBeam,output);
@@ -105,6 +105,11 @@ int main(int argc, char* argv[]){
             return 1;
             break;
     }
+
+    double strong_cc_strength=0.0, strong_cc_freq=-1.0;
+    IFINDBL0(strong_cc_strength,GaussianStrongBeam,hoffset_params);
+    IFINDBL1(strong_cc_freq,GaussianStrongBeam,hoffset_params);
+    gsb.set_hvoffset(strong_cc_strength,strong_cc_freq,0);
 
     //LinearX
     double linear_beta1,linear_beta2,linear_alpha1,linear_alpha2,linear_phase;
@@ -186,11 +191,22 @@ int main(int argc, char* argv[]){
     LinearY ip2ipY(ip2ip_beta1,ip2ip_alpha1,ip2ip_beta2,ip2ip_alpha2,ip2ip_phase);
 
     //Linear6D (one turn map)
-    vector<double> ot_beta={DBL0(OneTurn,beta),DBL1(OneTurn,beta),DBL2(OneTurn,beta)};
-    vector<double> ot_alpha={DBL0(OneTurn,alpha),DBL1(OneTurn,alpha)};
-    vector<double> ot_tune={DBL0(OneTurn,tune),DBL1(OneTurn,tune),DBL2(OneTurn,tune)};
-    vector<double> ot_xi={DBL0(OneTurn,chromaticity),DBL1(OneTurn,chromaticity)};
+    std::array<double,3> ot_beta={DBL0(OneTurn,beta),DBL1(OneTurn,beta),DBL2(OneTurn,beta)};
+    std::array<double,2> ot_alpha={DBL0(OneTurn,alpha),DBL1(OneTurn,alpha)};
+    std::array<double,3> ot_tune={DBL0(OneTurn,tune),DBL1(OneTurn,tune),DBL2(OneTurn,tune)};
+    std::array<double,2> ot_xi={DBL0(OneTurn,chromaticity),DBL1(OneTurn,chromaticity)};
     Linear6D ot(ot_beta,ot_alpha,ot_tune,ot_xi);
+
+    // Radiation and excitation
+    std::array<double,3> weak_damping_turns={-1.0,-1.0,-1.0}, weak_excitation_sizes={-1.0,-1.0,-1.0};
+    IFINDBL0(weak_damping_turns[0],OneTurn,damping_turns);
+    IFINDBL1(weak_damping_turns[1],OneTurn,damping_turns);
+    IFINDBL2(weak_damping_turns[2],OneTurn,damping_turns);
+    IFINDBL0(weak_excitation_sizes[0],OneTurn,equilibrium_sizes);
+    IFINDBL1(weak_excitation_sizes[1],OneTurn,equilibrium_sizes);
+    IFINDBL2(weak_excitation_sizes[2],OneTurn,equilibrium_sizes);
+
+    LumpedRad rad(weak_damping_turns,ot_beta,ot_alpha,weak_excitation_sizes);
 
     vector<double> beam_data_first=wb.get_statistics();
 
@@ -234,7 +250,7 @@ int main(int argc, char* argv[]){
             lum+=wb.Pass(gsb);
             wb.Pass(rlb,MX3,tcca,MX4);
 
-            wb.Pass(ot);
+            wb.Pass(ot,rad);
 
             turns[i]=current_turn+i+1;
             luminosity[i]=lum*weak_n_particle*strong_n_particle/weak_n_macro;

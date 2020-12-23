@@ -1,7 +1,8 @@
 CC=mpic++
 #target=weak_strong
 #target=weak_strong_twoIP
-target=soft_gaussian
+#target=soft_gaussian
+target=soft_gaussian_twoIP
 .PHONY:parser_compile clean
 oo=${target}.o crab_cavity.o Lorentz_boost.o linear_map.o beam.o faddeeva.o erfinv.o beam_beam.o poisson_solver.o radiation.o
 poo=../src/parser/bb_lex.o ../src/parser/bb_yacc.o ../src/parser/calc_lex.o ../src/parser/calc_yacc.o ../src/parser/fmt_lex.o ../src/parser/input.o

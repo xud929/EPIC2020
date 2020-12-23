@@ -3,12 +3,12 @@
 #include"Lorentz_boost.h"
 #include"linear_map.h"
 #include"beam.h"
+#include"radiation.h"
 #include<iostream>
 #include<fstream>
 #include<sstream>
 #include<vector>
 #include<random>
-#include<vector>
 #include<string>
 #include<algorithm>
 #include<iterator>
@@ -97,6 +97,15 @@ int main(int argc, char* argv[]){
         for(int i=0;i<num;++i)
             strong_growth_params.push_back(bbp::get<double>(tscope,tfield,i));
     }
+    string strong_centroid_method="";
+    vector<double> strong_centroid_params;
+    IFINSTR0(strong_centroid_method,GaussianStrongBeam,centroid_method);
+    if(!strong_centroid_method.empty()){
+        string tscope="GaussianStrongBeam",tfield="centroid_params";
+        int num=bbp::count_index<double>(tscope,tfield);
+        for(int i=0;i<num;++i)
+            strong_centroid_params.push_back(bbp::get<double>(tscope,tfield,i));
+    }
     string strong_method="equal_area";
     IFINSTR0(strong_method,GaussianStrongBeam,slice_method);
     ThinStrongBeam tsb(kbb,strong_beta,strong_alpha,strong_sigma);
@@ -115,6 +124,11 @@ int main(int argc, char* argv[]){
             return 1;
             break;
     }
+
+    double strong_cc_strength=0.0, strong_cc_freq=-1.0;
+    IFINDBL0(strong_cc_strength,GaussianStrongBeam,hoffset_params);
+    IFINDBL1(strong_cc_freq,GaussianStrongBeam,hoffset_params);
+    gsb.set_hvoffset(strong_cc_strength,strong_cc_freq,0);
 
     //LinearX
     double linear_beta1,linear_beta2,linear_alpha1,linear_alpha2,linear_phase;
@@ -188,6 +202,17 @@ int main(int argc, char* argv[]){
     std::array<double,2> ot_xi={DBL0(OneTurn,chromaticity),DBL1(OneTurn,chromaticity)};
     Linear6D ot(ot_beta,ot_alpha,ot_tune,ot_xi);
 
+    // Radiation and excitation
+    std::array<double,3> weak_damping_turns={-1.0,-1.0,-1.0}, weak_excitation_sizes={-1.0,-1.0,-1.0};
+    IFINDBL0(weak_damping_turns[0],OneTurn,damping_turns);
+    IFINDBL1(weak_damping_turns[1],OneTurn,damping_turns);
+    IFINDBL2(weak_damping_turns[2],OneTurn,damping_turns);
+    IFINDBL0(weak_excitation_sizes[0],OneTurn,equilibrium_sizes);
+    IFINDBL1(weak_excitation_sizes[1],OneTurn,equilibrium_sizes);
+    IFINDBL2(weak_excitation_sizes[2],OneTurn,equilibrium_sizes);
+
+    LumpedRad rad(weak_damping_turns,ot_beta,ot_alpha,weak_excitation_sizes);
+
     vector<double> beam_data_first=wb.get_statistics();
 
     std::ofstream fout;
@@ -230,9 +255,19 @@ int main(int argc, char* argv[]){
                 }
                 */
             }
+            if(!strong_centroid_method.empty()){
+                gsb.get_tsb().set_beam_centroid(strong_centroid_method,strong_centroid_params,current_turn+i);
+                /*
+                if(rank==0){
+                    cout.precision(16);
+                    cout.flags(std::ios::scientific);
+                    cout<<gsb.get_tsb().get_beam_centroid(0)<<"\t"<<gsb.get_tsb().get_beam_centroid(1)<<endl;
+                }
+                */
+            }
             wb.Pass(MX1,tccb,MX2,lb);
             double lum=wb.Pass(gsb);
-            wb.Pass(rlb,MX3,tcca,MX4,ot);
+            wb.Pass(rlb,MX3,tcca,MX4,ot,rad);
             turns[i]=current_turn+i+1;
             luminosity[i]=lum*weak_n_particle*strong_n_particle/weak_n_macro;
             beam_data[i]=wb.get_statistics();

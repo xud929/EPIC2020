@@ -408,6 +408,15 @@ int gaussian_beambeam_kick(double &Kx, double &Ky, double sigx, double sigy, dou
   }
 #ifndef LINEAR_BEAMBEAM_KICK
   double dsize=(sigx-sigy)/2.0, msize=sigx-dsize;
+  bool negx=false, negy=false;
+  if(x<0){
+      negx=true;
+      x=-x;
+  }
+  if(y<0){
+      negy=true;
+      y=-y;
+  }
   if(dsize<0.0)
 	dsize=-dsize;
   if(dsize/msize<round_beam_threshold){ //round beam
@@ -437,6 +446,10 @@ int gaussian_beambeam_kick(double &Kx, double &Ky, double sigx, double sigy, dou
   }else{
 	Ky=ret.imag();Kx=ret.real();
   }
+  if(negx)
+      Kx=-Kx;
+  if(negy)
+      Ky=-Ky;
 #else
   double temp=2.0/(sigx+sigy);
   Kx=temp*x/sigx;
@@ -452,6 +465,13 @@ ThinStrongBeam::SizeGrowthOption ThinStrongBeam::resolveSGO(const std::string &i
       return itr->second;
   else
       return SGO_Invalid;
+}
+ThinStrongBeam::CentroidGrowthOption ThinStrongBeam::resolveCGO(const std::string &input){
+  auto itr=CGO_dict.find(input);
+  if(itr!=CGO_dict.end())
+      return itr->second;
+  else
+      return CGO_Invalid;
 }
 void ThinStrongBeam::set_beam_size(const std::string &input, const std::vector<double> &sigma, const std::vector<double> &params, int n){
     double sx=sigma[0], sy=sigma[1];
@@ -477,6 +497,32 @@ void ThinStrongBeam::set_beam_size(const std::string &input, const std::vector<d
     sigxo=sx;sigyo=sy;
     emitx=sigxo*sigxo/betxo;
     emity=sigyo*sigyo/betyo;
+}
+void ThinStrongBeam::set_beam_centroid(const std::string &input, const std::vector<double> &params, int n){
+    switch(resolveCGO(input)){
+        case CGO_Linear:
+            xo=params[0]+params[1]*n;
+            yo=params[2]+params[3]*n;
+            break;
+        case CGO_SIN:
+            xo=params[0]*std::sin(2.0*M_PI*n*params[1]);
+            yo=params[2]*std::sin(2.0*M_PI*n*params[3]);
+            break;
+        case CGO_COS:
+            xo=params[0]*std::cos(2.0*M_PI*n*params[1]);
+            yo=params[2]*std::cos(2.0*M_PI*n*params[3]);
+            break;
+        case CGO_WhiteNoise:
+            {
+                trng::normal_dist<double> nX(params[0],params[1]),nY(params[2],params[3]);
+                xo=nX(Beam::get_rng());
+                yo=nY(Beam::get_rng());
+            }
+            break;
+        case CGO_Invalid:
+            xo=0.0;yo=0.0;
+            break;
+    }
 }
 
 /************************************************************************************************************************************************/
@@ -674,4 +720,23 @@ GaussianStrongBeam & GaussianStrongBeam::set_equal_width(double sig_length, doub
     }
     return *this;
 }
-
+GaussianStrongBeam & GaussianStrongBeam::set_hvoffset(double coef, double freq, int dim){
+    if(freq<=0.0)
+        return *this;
+    double kcc=2.0*M_PI*freq/phys_const::clight;
+    for(int i=0;i<ns;++i){
+        double t=-coef*(std::sin(kcc*slice_center[i])/kcc-slice_center[i]);
+        switch(dim){
+            case 0:
+                slice_hoffset[i]=t;
+                break;
+            case 1:
+                slice_voffset[i]=t;
+                break;
+            default:
+                throw std::runtime_error("Invalide dimension when setting GaussianStrongBeam offset");
+                break;
+        }
+    }
+    return *this;
+}
